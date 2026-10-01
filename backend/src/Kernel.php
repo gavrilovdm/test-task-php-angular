@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\Config\Settings;
 use App\Controller\AuthController;
 use App\Controller\DocsController;
 use App\Controller\HealthController;
@@ -50,8 +51,7 @@ final class Kernel
 
         $app->addBodyParsingMiddleware();
         $app->addRoutingMiddleware();
-        $settings = $container->get('settings');
-        $errorMiddleware = $app->addErrorMiddleware('prod' !== $settings['env'], false, false);
+        $errorMiddleware = $app->addErrorMiddleware(!$container->get(Settings::class)->isProduction(), false, false);
         $errorMiddleware->setDefaultErrorHandler($container->get(JsonErrorHandler::class));
         // CORS is the outermost layer so that error responses also carry CORS headers.
         $app->add(CorsMiddleware::class);

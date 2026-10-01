@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Exception;
 
-final class NotFoundException extends ApiException
+final class NotFoundException extends AppException
 {
-    public function __construct(string $message = 'Resource not found')
+    public function __construct(string $message = 'Ресурс не найден')
     {
-        parent::__construct($message, 404);
+        parent::__construct($message);
     }
 }

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Import;
+namespace App\Service\Import\Image;
 
 final readonly class ImageDownloadResult
 {

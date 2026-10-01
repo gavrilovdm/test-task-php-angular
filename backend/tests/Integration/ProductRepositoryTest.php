@@ -101,18 +101,19 @@ final class ProductRepositoryTest extends DatabaseTestCase
         $this->em->clear();
 
         $page = $this->repository->paginate(new ProductFilter(page: 2, limit: 10));
-        self::assertSame(25, $page['total']);
-        self::assertCount(10, $page['items']);
-        self::assertSame('P-11', $page['items'][0]->getExternalCode());
+        self::assertSame(25, $page->total);
+        self::assertSame(3, $page->totalPages());
+        self::assertCount(10, $page->items);
+        self::assertSame('P-11', $page->items[0]->getExternalCode());
 
         $byName = $this->repository->paginate(new ProductFilter(name: 'бермуды'));
-        self::assertSame(13, $byName['total'], 'case-insensitive name search');
+        self::assertSame(13, $byName->total, 'case-insensitive name search');
 
         $byPrice = $this->repository->paginate(new ProductFilter(priceMin: '500.00', priceMax: '1000.00'));
-        self::assertSame(6, $byPrice['total']);
+        self::assertSame(6, $byPrice->total);
 
         $combined = $this->repository->paginate(new ProductFilter(name: 'Леггинсы', priceMin: '2000.00'));
-        self::assertSame(['P-20', 'P-22', 'P-24'], array_map(static fn (Product $p) => $p->getExternalCode(), $combined['items']));
+        self::assertSame(['P-20', 'P-22', 'P-24'], array_map(static fn (Product $p) => $p->getExternalCode(), $combined->items));
     }
 
     public function testNameSearchEscapesWildcards(): void
@@ -120,6 +121,6 @@ final class ProductRepositoryTest extends DatabaseTestCase
         $this->createProduct('W-1', 'Скидка 100%', '1.00');
         $this->createProduct('W-2', 'Скидка 1000', '1.00');
 
-        self::assertSame(1, $this->repository->paginate(new ProductFilter(name: '100%'))['total']);
+        self::assertSame(1, $this->repository->paginate(new ProductFilter(name: '100%'))->total);
     }
 }

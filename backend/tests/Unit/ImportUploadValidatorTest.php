@@ -6,53 +6,48 @@ namespace App\Tests\Unit;
 
 use App\Exception\ValidationException;
 use App\Service\Import\ImportUploadValidator;
+use App\Service\Import\UploadedImportFile;
 use PHPUnit\Framework\TestCase;
-use Slim\Psr7\Factory\StreamFactory;
-use Slim\Psr7\UploadedFile;
 
 final class ImportUploadValidatorTest extends TestCase
 {
     private const SAMPLE = __DIR__.'/../fixtures/products.xlsx';
+    private const MAX = 10 * 1024 * 1024;
 
-    private function upload(string $sourcePath, string $clientName, int $error = \UPLOAD_ERR_OK, ?int $size = null): UploadedFile
+    private static function file(string $path, string $name, int $error = \UPLOAD_ERR_OK): UploadedImportFile
     {
-        $tmp = tempnam(sys_get_temp_dir(), 'upl');
-        copy($sourcePath, (string) $tmp);
+        return new UploadedImportFile($path, $name, (int) filesize($path), $error);
+    }
 
-        return new UploadedFile((new StreamFactory())->createStreamFromFile((string) $tmp), $clientName, null, $size ?? filesize((string) $tmp), $error);
+    private static function rejectionReason(ImportUploadValidator $validator, ?UploadedImportFile $file): string
+    {
+        try {
+            $validator->validate($file);
+        } catch (ValidationException $e) {
+            return $e->getErrors()['file'];
+        }
+        self::fail('ValidationException expected');
     }
 
     public function testAcceptsXlsx(): void
     {
-        (new ImportUploadValidator(10 * 1024 * 1024))->validate($this->upload(self::SAMPLE, 'products.xlsx'));
+        (new ImportUploadValidator(self::MAX))->validate(self::file(self::SAMPLE, 'products.xlsx'));
         $this->addToAssertionCount(1);
     }
 
     public function testRejectsMissingFile(): void
     {
-        $this->expectException(ValidationException::class);
-        (new ImportUploadValidator(1024))->validate(null);
+        self::assertStringContainsString('обязательно', self::rejectionReason(new ImportUploadValidator(self::MAX), null));
     }
 
     public function testRejectsTooLargeFile(): void
     {
-        $this->expectExceptionObject(new ValidationException('Невалидный файл'));
-        try {
-            (new ImportUploadValidator(1024))->validate($this->upload(self::SAMPLE, 'products.xlsx'));
-        } catch (ValidationException $e) {
-            self::assertStringContainsString('Размер файла', $e->getErrors()['file']);
-            throw $e;
-        }
+        self::assertStringContainsString('Размер файла', self::rejectionReason(new ImportUploadValidator(1024), self::file(self::SAMPLE, 'products.xlsx')));
     }
 
     public function testRejectsWrongExtension(): void
     {
-        try {
-            (new ImportUploadValidator(10 * 1024 * 1024))->validate($this->upload(self::SAMPLE, 'products.csv'));
-            self::fail('ValidationException expected');
-        } catch (ValidationException $e) {
-            self::assertStringContainsString('.xlsx', $e->getErrors()['file']);
-        }
+        self::assertStringContainsString('.xlsx', self::rejectionReason(new ImportUploadValidator(self::MAX), self::file(self::SAMPLE, 'products.csv')));
     }
 
     public function testRejectsFakeXlsx(): void
@@ -60,17 +55,11 @@ final class ImportUploadValidatorTest extends TestCase
         $fake = (string) tempnam(sys_get_temp_dir(), 'fake');
         file_put_contents($fake, 'just text pretending to be a spreadsheet');
 
-        try {
-            (new ImportUploadValidator(10 * 1024 * 1024))->validate($this->upload($fake, 'products.xlsx'));
-            self::fail('ValidationException expected');
-        } catch (ValidationException $e) {
-            self::assertStringContainsString('Недопустимый тип файла', $e->getErrors()['file']);
-        }
+        self::assertStringContainsString('Недопустимый тип файла', self::rejectionReason(new ImportUploadValidator(self::MAX), self::file($fake, 'products.xlsx')));
     }
 
     public function testRejectsUploadError(): void
     {
-        $this->expectException(ValidationException::class);
-        (new ImportUploadValidator(10 * 1024 * 1024))->validate($this->upload(self::SAMPLE, 'products.xlsx', \UPLOAD_ERR_INI_SIZE));
+        self::assertStringContainsString('Размер файла', self::rejectionReason(new ImportUploadValidator(self::MAX), self::file(self::SAMPLE, 'products.xlsx', \UPLOAD_ERR_INI_SIZE)));
     }
 }

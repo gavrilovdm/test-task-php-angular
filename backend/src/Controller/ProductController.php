@@ -7,7 +7,7 @@ namespace App\Controller;
 use App\Exception\NotFoundException;
 use App\Http\JsonResponder;
 use App\Http\ProductPresenter;
-use App\Repository\ProductFilter;
+use App\Http\Request\ProductFilterFactory;
 use App\Repository\ProductRepository;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -17,22 +17,22 @@ final class ProductController
     public function __construct(
         private readonly ProductRepository $products,
         private readonly ProductPresenter $presenter,
+        private readonly ProductFilterFactory $filters,
     ) {
     }
 
     /** GET /api/products?page=&limit=&name=&price_min=&price_max= */
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        $filter = ProductFilter::fromQuery($request->getQueryParams());
-        $result = $this->products->paginate($filter);
+        $page = $this->products->paginate($this->filters->fromQuery($request->getQueryParams()));
 
         return JsonResponder::json($response, [
-            'data' => array_map($this->presenter->summary(...), $result['items']),
+            'data' => array_map($this->presenter->summary(...), $page->items),
             'meta' => [
-                'page' => $filter->page,
-                'limit' => $filter->limit,
-                'total' => $result['total'],
-                'totalPages' => (int) ceil($result['total'] / $filter->limit),
+                'page' => $page->page,
+                'limit' => $page->limit,
+                'total' => $page->total,
+                'totalPages' => $page->totalPages(),
             ],
         ]);
     }

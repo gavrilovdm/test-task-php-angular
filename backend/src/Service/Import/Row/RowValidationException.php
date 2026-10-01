@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Import;
+namespace App\Service\Import\Row;
 
-/** Thrown when a row cannot be imported; carries all field errors of that row. */
+/** A row cannot be imported; carries all field errors of that row. */
 final class RowValidationException extends \RuntimeException
 {
     /**

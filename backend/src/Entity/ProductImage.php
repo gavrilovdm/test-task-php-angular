@@ -60,13 +60,6 @@ class ProductImage
         return $this->path;
     }
 
-    public function setPath(?string $path): self
-    {
-        $this->path = $path;
-
-        return $this;
-    }
-
     public function getPosition(): int
     {
         return $this->position;

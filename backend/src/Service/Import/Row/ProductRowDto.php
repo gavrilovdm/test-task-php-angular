@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Import;
+namespace App\Service\Import\Row;
 
 /** A validated, normalized row of the import file. */
 final readonly class ProductRowDto
 {
     /**
-     * @param array<string, string>                       $attributes key => value from "Доп. поле: *" columns
+     * @param array<string, string>                       $attributes key => value
      * @param list<string>                                $imageUrls
      * @param list<array{field: string, message: string}> $warnings   non-fatal problems of the row
      */

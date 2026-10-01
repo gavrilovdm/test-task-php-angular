@@ -106,7 +106,18 @@ class ImportJob
         ++$this->processedRows;
     }
 
-    public function addError(string $message, ?int $row = null, ?string $externalCode = null, ?string $field = null, string $level = self::LEVEL_ERROR): void
+    public function addError(string $message, ?int $row = null, ?string $externalCode = null, ?string $field = null): void
+    {
+        $this->addReportEntry(self::LEVEL_ERROR, $message, $row, $externalCode, $field);
+    }
+
+    /** Non-fatal problem: the row was imported, but something (e.g. an image) was skipped. */
+    public function addWarning(string $message, ?int $row = null, ?string $externalCode = null, ?string $field = null): void
+    {
+        $this->addReportEntry(self::LEVEL_WARNING, $message, $row, $externalCode, $field);
+    }
+
+    private function addReportEntry(string $level, string $message, ?int $row, ?string $externalCode, ?string $field): void
     {
         $this->errors[] = [
             'row' => $row,

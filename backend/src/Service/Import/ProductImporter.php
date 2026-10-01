@@ -5,25 +5,27 @@ declare(strict_types=1);
 namespace App\Service\Import;
 
 use App\Entity\ImportJob;
-use App\Entity\Product;
+use App\Persistence\UnitOfWork;
 use App\Repository\ImportJobRepository;
-use App\Repository\ProductRepository;
-use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Import\Contract\ProductSourceReader;
+use App\Service\Import\Image\ImageDownloader;
+use App\Service\Import\Row\ProductRowMapper;
+use App\Service\Import\Row\RowValidationException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Runs an import job: parses the file, downloads images and upserts products by external_code.
- * Invalid rows never stop the process — they are collected into the job's error report.
+ * Runs an import job row by row. Invalid rows never stop the process —
+ * they are collected into the job's report, and progress is saved after every row.
  */
 final class ProductImporter
 {
     public function __construct(
-        private readonly EntityManagerInterface $em,
-        private readonly ProductRepository $products,
-        private readonly ImportJobRepository $jobs,
-        private readonly XlsxProductReader $reader,
+        private readonly ProductSourceReader $reader,
         private readonly ProductRowMapper $mapper,
         private readonly ImageDownloader $images,
+        private readonly ProductWriter $writer,
+        private readonly ImportJobRepository $jobs,
+        private readonly UnitOfWork $unitOfWork,
         private readonly LoggerInterface $logger,
     ) {
     }
@@ -31,8 +33,8 @@ final class ProductImporter
     public function run(ImportJob $job): void
     {
         try {
-            $data = $this->reader->read($job->getFilePath());
-            $this->mapper->assertHeaders($data['headers']);
+            $source = $this->reader->read($job->getFilePath());
+            $this->mapper->assertHeaders($source->headers);
         } catch (InvalidImportFileException $e) {
             $job->fail($e->getMessage());
             $this->jobs->saveProgress($job);
@@ -40,33 +42,17 @@ final class ProductImporter
             return;
         }
 
-        $job->start(\count($data['rows']));
+        $job->start($source->rowCount());
         $this->jobs->saveProgress($job);
-        $this->em->clear();
+        // From here on the job is detached; its state is written via saveProgress().
+        $this->unitOfWork->clear();
 
-        foreach ($data['rows'] as $rowNumber => $row) {
-            $externalCode = '' === ($row[ProductRowMapper::COL_EXTERNAL_CODE] ?? '') ? null : $row[ProductRowMapper::COL_EXTERNAL_CODE];
-            try {
-                $this->importRow($job, $row, $rowNumber);
-            } catch (RowValidationException $e) {
-                foreach ($e->errors as $error) {
-                    $job->addError($error['message'], $rowNumber, $e->externalCode, $error['field']);
-                }
-                $job->markRowFailed();
-            } catch (\Throwable $e) {
-                $this->logger->error('Import row failed', ['job' => $job->getId(), 'row' => $rowNumber, 'exception' => $e]);
-                $job->addError('Не удалось сохранить товар: '.$e->getMessage(), $rowNumber, $externalCode);
-                $job->markRowFailed();
+        foreach ($source->rows as $rowNumber => $row) {
+            if (!$this->importRow($job, $row, $rowNumber)) {
+                $job->fail('Импорт прерван из-за ошибки базы данных');
+                $this->jobs->saveProgress($job);
 
-                if (!$this->em->isOpen()) {
-                    // A failed flush closes the EntityManager — continuing is impossible within this process.
-                    $job->fail('Импорт прерван из-за ошибки базы данных');
-                    $this->jobs->saveProgress($job);
-
-                    return;
-                }
-            } finally {
-                $this->em->clear();
+                return;
             }
             $this->jobs->saveProgress($job);
         }
@@ -77,64 +63,43 @@ final class ProductImporter
 
     /**
      * @param array<string, string> $row
-     */
-    private function importRow(ImportJob $job, array $row, int $rowNumber): void
-    {
-        $dto = $this->mapper->map($row, $rowNumber);
-        foreach ($dto->warnings as $warning) {
-            $job->addError($warning['message'], $rowNumber, $dto->externalCode, $warning['field'], ImportJob::LEVEL_WARNING);
-        }
-
-        // Network I/O happens before the DB transaction to keep the transaction short.
-        $images = [];
-        foreach ($this->images->downloadAll($dto->imageUrls) as $result) {
-            if (!$result->isSuccessful()) {
-                $job->addError(
-                    \sprintf('Изображение %s не загружено: %s', $result->url, $result->error),
-                    $rowNumber,
-                    $dto->externalCode,
-                    'image',
-                    ImportJob::LEVEL_WARNING,
-                );
-            }
-            $images[] = ['url' => $result->url, 'path' => $result->path];
-        }
-
-        $this->upsert($dto, $images) ? $job->markRowCreated() : $job->markRowUpdated();
-    }
-
-    /**
-     * Writes the product with its attributes and images atomically.
      *
-     * @param list<array{url: string, path: ?string}> $images
-     *
-     * @return bool true when a new product was created, false when an existing one was updated
+     * @return bool false when the persistence session is broken and the import cannot continue
      */
-    private function upsert(ProductRowDto $dto, array $images): bool
+    private function importRow(ImportJob $job, array $row, int $rowNumber): bool
     {
-        $connection = $this->em->getConnection();
-        $connection->beginTransaction();
+        $externalCode = null;
         try {
-            $product = $this->products->findByExternalCode($dto->externalCode);
-            $isNew = null === $product;
-            $product ??= new Product($dto->externalCode);
-
-            $product->setName($dto->name)
-                ->setDescription($dto->description)
-                ->setPrice($dto->price)
-                ->setDiscount($dto->discount);
-            $product->replaceAttributes($dto->attributes);
-            $product->replaceImages($images);
-
-            $this->products->save($product);
-            $connection->commit();
-
-            return $isNew;
-        } catch (\Throwable $e) {
-            if ($connection->isTransactionActive()) {
-                $connection->rollBack();
+            $dto = $this->mapper->map($row, $rowNumber);
+            $externalCode = $dto->externalCode;
+            foreach ($dto->warnings as $warning) {
+                $job->addWarning($warning['message'], $rowNumber, $dto->externalCode, $warning['field']);
             }
-            throw $e;
+
+            // Network I/O happens before the DB transaction to keep the transaction short.
+            $images = [];
+            foreach ($this->images->downloadAll($dto->imageUrls) as $result) {
+                if (!$result->isSuccessful()) {
+                    $job->addWarning(\sprintf('Изображение %s не загружено: %s', $result->url, $result->error), $rowNumber, $dto->externalCode, 'image');
+                }
+                $images[] = ['url' => $result->url, 'path' => $result->path];
+            }
+
+            $this->writer->upsert($dto, $images) ? $job->markRowCreated() : $job->markRowUpdated();
+        } catch (RowValidationException $e) {
+            foreach ($e->errors as $error) {
+                $job->addError($error['message'], $rowNumber, $e->externalCode, $error['field']);
+            }
+            $job->markRowFailed();
+        } catch (\Throwable $e) {
+            // Details go to the log only; the client report gets a generic message.
+            $this->logger->error('Import row failed', ['job' => $job->getId(), 'row' => $rowNumber, 'exception' => $e]);
+            $job->addError('Внутренняя ошибка при сохранении товара', $rowNumber, $externalCode);
+            $job->markRowFailed();
+        } finally {
+            $this->unitOfWork->clear();
         }
+
+        return $this->unitOfWork->isOpen();
     }
 }

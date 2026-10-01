@@ -67,3 +67,7 @@ cs-fix: ## PHP CS Fixer (apply)
 	$(PHP_DEV) vendor/bin/php-cs-fixer fix
 
 lint: stan cs ## Static analysis + code style
+
+password-hash: ## Print a bcrypt hash for ADMIN_PASSWORD_HASH: make password-hash PASSWORD=secret
+	@test -n "$(PASSWORD)" || (echo "Usage: make password-hash PASSWORD=secret" && exit 1)
+	@$(PHP_DEV) php -r 'echo password_hash($$argv[1], PASSWORD_BCRYPT), PHP_EOL;' '$(PASSWORD)'

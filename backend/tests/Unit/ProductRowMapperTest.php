@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit;
 
+use App\Domain\DiscountCalculator;
 use App\Service\Import\InvalidImportFileException;
-use App\Service\Import\ProductRowMapper;
-use App\Service\Import\RowValidationException;
+use App\Service\Import\Row\ColumnMap;
+use App\Service\Import\Row\MoneyParser;
+use App\Service\Import\Row\ProductRowMapper;
+use App\Service\Import\Row\RowValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -16,7 +19,7 @@ final class ProductRowMapperTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mapper = new ProductRowMapper();
+        $this->mapper = new ProductRowMapper(ColumnMap::default());
     }
 
     /**
@@ -72,7 +75,7 @@ final class ProductRowMapperTest extends TestCase
     #[DataProvider('discountProvider')]
     public function testCalculatesDiscount(float $price, float $purchase, string $expected): void
     {
-        self::assertSame($expected, ProductRowMapper::calculateDiscount($price, $purchase));
+        self::assertSame($expected, DiscountCalculator::percent($price, $purchase));
     }
 
     public function testDiscountIsNullWithoutPurchasePrice(): void
@@ -95,7 +98,7 @@ final class ProductRowMapperTest extends TestCase
     #[DataProvider('moneyProvider')]
     public function testParsesMoney(string $raw, ?float $expected): void
     {
-        self::assertSame($expected, ProductRowMapper::parseMoney($raw));
+        self::assertSame($expected, MoneyParser::parse($raw));
     }
 
     /** @return iterable<string, array{array<string, string>, string}> */
@@ -147,5 +150,17 @@ final class ProductRowMapperTest extends TestCase
         $this->expectExceptionMessage('Внешний код');
 
         $this->mapper->assertHeaders(['Наименование', 'Цена: Цена продажи']);
+    }
+
+    public function testCustomColumnMapSupportsAnotherFormat(): void
+    {
+        $mapper = new ProductRowMapper(new ColumnMap('SKU', 'Title', 'Text', 'Price', 'Cost', 'Attr:', ['Photos']));
+
+        $dto = $mapper->map(['SKU' => 'S-1', 'Title' => 'Shirt', 'Price' => '200', 'Cost' => '150', 'Attr: Color' => 'Red', 'Photos' => 'https://img.test/1.jpg'], 2);
+
+        self::assertSame('S-1', $dto->externalCode);
+        self::assertSame('25.00', $dto->discount);
+        self::assertSame(['Color' => 'Red'], $dto->attributes);
+        self::assertSame(['https://img.test/1.jpg'], $dto->imageUrls);
     }
 }

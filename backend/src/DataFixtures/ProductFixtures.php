@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\DataFixtures;
 
+use App\Domain\DiscountCalculator;
 use App\Entity\Product;
-use App\Service\Import\ProductRowMapper;
 use Doctrine\Common\DataFixtures\AbstractFixture;
 use Doctrine\Persistence\ObjectManager;
 
@@ -29,7 +29,7 @@ final class ProductFixtures extends AbstractFixture
                 ->setName(\sprintf('%s %s, %s', self::NAMES[$i % \count(self::NAMES)], self::COLORS[$i % \count(self::COLORS)], self::SIZES[$i % \count(self::SIZES)]))
                 ->setDescription('Демонстрационный товар №'.$i.', созданный сидером.')
                 ->setPrice(number_format($price, 2, '.', ''))
-                ->setDiscount(ProductRowMapper::calculateDiscount((float) $price, $purchase));
+                ->setDiscount(DiscountCalculator::percent((float) $price, $purchase));
 
             $manager->persist($product);
             $this->addReference(self::REFERENCE_PREFIX.$i, $product);

@@ -113,7 +113,7 @@ final class ProductImporterTest extends DatabaseTestCase
         $job = $this->runImport($path);
 
         self::assertSame(ImportJob::STATUS_FAILED, $job->getStatus());
-        self::assertStringContainsString('Missing required columns', $job->getErrors()[0]['message']);
+        self::assertStringContainsString('В файле нет обязательных колонок', $job->getErrors()[0]['message']);
         self::assertSame(0, $this->rows('products'));
     }
 }

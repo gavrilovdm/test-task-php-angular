@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Exception;
 
-final class AuthenticationException extends ApiException
+final class AuthenticationException extends AppException
 {
-    public function __construct(string $message = 'Unauthorized')
+    public function __construct(string $message = 'Требуется авторизация')
     {
-        parent::__construct($message, 401);
+        parent::__construct($message);
     }
 }

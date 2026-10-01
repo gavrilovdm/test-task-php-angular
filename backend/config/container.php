@@ -2,16 +2,33 @@
 
 declare(strict_types=1);
 
+use App\Config\Settings;
 use App\Controller\DocsController;
-use App\Http\StderrLogger;
+use App\Http\JsonErrorHandler;
+use App\Logging\StderrLogger;
 use App\Messenger\ImportProductsHandler;
 use App\Messenger\ImportProductsMessage;
 use App\Middleware\CorsMiddleware;
 use App\Middleware\RateLimitMiddleware;
+use App\Persistence\DatabaseHealthCheck;
+use App\Persistence\DoctrineDatabaseHealthCheck;
+use App\Persistence\DoctrineUnitOfWork;
+use App\Persistence\UnitOfWork;
+use App\Repository\Doctrine\DoctrineImportJobRepository;
+use App\Repository\Doctrine\DoctrineProductRepository;
+use App\Repository\ImportJobRepository;
+use App\Repository\ProductRepository;
 use App\Service\Auth\AuthService;
-use App\Service\Import\ImageDownloader;
-use App\Service\Import\ImportService;
+use App\Service\Import\Contract\ImageFetcher;
+use App\Service\Import\Contract\ImageStorage;
+use App\Service\Import\Contract\ImportFileStorage;
+use App\Service\Import\Contract\ProductSourceReader;
+use App\Service\Import\Image\HttpImageFetcher;
+use App\Service\Import\Image\LocalImageStorage;
 use App\Service\Import\ImportUploadValidator;
+use App\Service\Import\Row\ColumnMap;
+use App\Service\Import\Source\XlsxProductReader;
+use App\Service\Import\Storage\LocalImportFileStorage;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Tools\DsnParser;
@@ -38,41 +55,38 @@ use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 use Symfony\Component\Messenger\Transport\TransportInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\Storage\CacheStorage;
+use Symfony\Component\RateLimiter\Storage\StorageInterface;
 
 use function DI\autowire;
 use function DI\get;
 
 return [
-    'settings' => require __DIR__.'/settings.php',
+    Settings::class => static fn (): Settings => Settings::fromEnvironment(dirname(__DIR__)),
 
     LoggerInterface::class => static fn (): LoggerInterface => new StderrLogger(),
     ResponseFactoryInterface::class => autowire(ResponseFactory::class),
 
-    // ---------- Doctrine ----------
-    EntityManagerInterface::class => static function (ContainerInterface $c): EntityManagerInterface {
-        $s = $c->get('settings');
-        $isDev = 'prod' !== $s['env'];
-        $cache = $isDev ? new ArrayAdapter() : new PhpFilesAdapter('doctrine', 0, $s['cache_dir']);
-
-        $config = ORMSetup::createAttributeMetadataConfig([$s['root'].'/src/Entity'], $isDev, null, $cache);
+    // ---------- Persistence (Doctrine) ----------
+    EntityManagerInterface::class => static function (Settings $s): EntityManagerInterface {
+        $cache = $s->isProduction() ? new PhpFilesAdapter('doctrine', 0, $s->cacheDir) : new ArrayAdapter();
+        $config = ORMSetup::createAttributeMetadataConfig([$s->rootDir.'/src/Entity'], !$s->isProduction(), null, $cache);
         $config->enableNativeLazyObjects(true);
 
-        $params = (new DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql', 'pgsql' => 'pdo_pgsql']))->parse($s['database_url']);
+        $params = (new DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql', 'pgsql' => 'pdo_pgsql']))->parse($s->databaseUrl);
 
         return new EntityManager(DriverManager::getConnection($params, $config), $config);
     },
     EntityManager::class => get(EntityManagerInterface::class),
     Connection::class => static fn (EntityManagerInterface $em): Connection => $em->getConnection(),
+    UnitOfWork::class => autowire(DoctrineUnitOfWork::class),
+    DatabaseHealthCheck::class => autowire(DoctrineDatabaseHealthCheck::class),
+    ProductRepository::class => autowire(DoctrineProductRepository::class),
+    ImportJobRepository::class => autowire(DoctrineImportJobRepository::class),
 
     // ---------- Messenger (RabbitMQ via AMQP; "in-memory://" for tests) ----------
-    'messenger.transport.async' => static function (ContainerInterface $c): TransportInterface {
-        $dsn = $c->get('settings')['messenger_dsn'];
-        if (str_starts_with($dsn, 'in-memory://')) {
-            return new InMemoryTransport();
-        }
-
-        return (new AmqpTransportFactory())->createTransport($dsn, [], new PhpSerializer());
-    },
+    'messenger.transport.async' => static fn (Settings $s): TransportInterface => str_starts_with($s->messengerDsn, 'in-memory://')
+        ? new InMemoryTransport()
+        : (new AmqpTransportFactory())->createTransport($s->messengerDsn, [], new PhpSerializer()),
     MessageBusInterface::class => static fn (ContainerInterface $c): MessageBusInterface => new MessageBus([
         new SendMessageMiddleware(new SendersLocator([ImportProductsMessage::class => ['messenger.transport.async']], $c)),
         new HandleMessageMiddleware(new HandlersLocator([
@@ -80,42 +94,33 @@ return [
         ])),
     ]),
 
-    // ---------- Services ----------
-    AuthService::class => static fn (ContainerInterface $c): AuthService => new AuthService(
-        $c->get('settings')['admin']['email'],
-        $c->get('settings')['admin']['password'],
-        $c->get('settings')['jwt']['secret'],
-        $c->get('settings')['jwt']['ttl'],
-    ),
-    ImportUploadValidator::class => static fn (ContainerInterface $c): ImportUploadValidator => new ImportUploadValidator($c->get('settings')['import']['max_file_size']),
-    ImportService::class => autowire()->constructorParameter('importsDir', DI\factory(static fn (ContainerInterface $c): string => $c->get('settings')['import']['dir'])),
-    'http.images' => static fn (ContainerInterface $c): Client => new Client([
-        'timeout' => $c->get('settings')['images']['timeout'],
+    // ---------- Import ----------
+    ColumnMap::class => static fn (): ColumnMap => ColumnMap::default(),
+    ProductSourceReader::class => autowire(XlsxProductReader::class),
+    ImportFileStorage::class => static fn (Settings $s): ImportFileStorage => new LocalImportFileStorage($s->importsDir),
+    ImportUploadValidator::class => static fn (Settings $s): ImportUploadValidator => new ImportUploadValidator($s->importMaxFileSize),
+    ImageFetcher::class => static fn (Settings $s): ImageFetcher => new HttpImageFetcher(new Client([
+        'timeout' => $s->imageDownloadTimeout,
         'connect_timeout' => 5,
         'headers' => ['User-Agent' => 'ProductsImporter/1.0'],
-    ]),
-    ImageDownloader::class => static fn (ContainerInterface $c): ImageDownloader => new ImageDownloader(
-        $c->get('http.images'),
-        $c->get('settings')['images']['dir'],
-        $c->get('settings')['images']['public_prefix'],
-    ),
+    ])),
+    ImageStorage::class => static fn (Settings $s): ImageStorage => new LocalImageStorage($s->imagesDir, $s->imagesPublicPrefix),
+
+    // ---------- Auth ----------
+    AuthService::class => static fn (Settings $s): AuthService => new AuthService($s->adminEmail, $s->adminPasswordHash, $s->jwtSecret, $s->jwtTtl),
 
     // ---------- HTTP ----------
-    'rate_limiter.storage' => static fn (ContainerInterface $c): CacheStorage => new CacheStorage(new FilesystemAdapter('rate_limiter', 0, $c->get('settings')['cache_dir'])),
-    'rate_limiter.import' => static fn (ContainerInterface $c): RateLimiterFactory => new RateLimiterFactory([
-        'id' => 'import',
-        'policy' => 'sliding_window',
-        'limit' => $c->get('settings')['import']['rate_limit'],
-        'interval' => $c->get('settings')['import']['rate_interval'],
-    ], $c->get('rate_limiter.storage')),
-    RateLimitMiddleware::class => static fn (ContainerInterface $c): RateLimitMiddleware => new RateLimitMiddleware(
-        $c->get('rate_limiter.import'),
+    StorageInterface::class => static fn (Settings $s): StorageInterface => new CacheStorage(new FilesystemAdapter('rate_limiter', 0, $s->cacheDir)),
+    RateLimitMiddleware::class => static fn (Settings $s, ContainerInterface $c): RateLimitMiddleware => new RateLimitMiddleware(
+        new RateLimiterFactory([
+            'id' => 'import',
+            'policy' => 'sliding_window',
+            'limit' => $s->importRateLimit,
+            'interval' => $s->importRateInterval,
+        ], $c->get(StorageInterface::class)),
         $c->get(ResponseFactoryInterface::class),
-        $c->get(App\Http\JsonErrorHandler::class),
+        $c->get(JsonErrorHandler::class),
     ),
-    CorsMiddleware::class => static fn (ContainerInterface $c): CorsMiddleware => new CorsMiddleware(
-        $c->get('settings')['cors_allow_origin'],
-        $c->get(ResponseFactoryInterface::class),
-    ),
-    DocsController::class => static fn (ContainerInterface $c): DocsController => new DocsController($c->get('settings')['openapi_spec']),
+    CorsMiddleware::class => static fn (Settings $s, ResponseFactoryInterface $f): CorsMiddleware => new CorsMiddleware($s->corsAllowOrigin, $f),
+    DocsController::class => static fn (Settings $s): DocsController => new DocsController($s->openApiSpecPath),
 ];

@@ -34,7 +34,13 @@ final class AuthController
             throw new ValidationException('Некорректные данные', $errors);
         }
 
-        return JsonResponder::json($response, $this->auth->login($email, $password));
+        $token = $this->auth->login($email, $password);
+
+        return JsonResponder::json($response, [
+            'token' => $token->token,
+            'expiresAt' => $token->expiresAt->format(\DATE_ATOM),
+            'user' => ['email' => $token->email],
+        ]);
     }
 
     public function me(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface

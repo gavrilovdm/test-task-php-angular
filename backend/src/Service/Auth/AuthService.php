@@ -8,43 +8,38 @@ use App\Exception\AuthenticationException;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-/**
- * Stateless JWT authentication for the single administrator account configured via env.
- */
+/** Stateless JWT authentication of the administrator account configured via env. */
 final class AuthService
 {
     private const ALGORITHM = 'HS256';
 
     public function __construct(
         private readonly string $adminEmail,
-        private readonly string $adminPassword,
+        private readonly string $adminPasswordHash,
         private readonly string $secret,
         private readonly int $ttl,
     ) {
     }
 
-    /**
-     * @return array{token: string, expiresAt: string, user: array{email: string}}
-     *
-     * @throws AuthenticationException
-     */
-    public function login(string $email, string $password): array
+    /** @throws AuthenticationException */
+    public function login(string $email, string $password): AuthToken
     {
         $validEmail = hash_equals(mb_strtolower($this->adminEmail), mb_strtolower(trim($email)));
-        $validPassword = hash_equals($this->adminPassword, $password);
+        // password_verify runs even for a wrong email to keep response time uniform.
+        $validPassword = password_verify($password, $this->adminPasswordHash);
         if (!$validEmail || !$validPassword) {
             throw new AuthenticationException('Неверный email или пароль');
         }
 
-        $now = time();
-        $expiresAt = $now + $this->ttl;
-        $token = JWT::encode(['sub' => $this->adminEmail, 'iat' => $now, 'exp' => $expiresAt], $this->secret, self::ALGORITHM);
+        $issuedAt = new \DateTimeImmutable();
+        $expiresAt = $issuedAt->modify(\sprintf('+%d seconds', $this->ttl));
+        $token = JWT::encode(
+            ['sub' => $this->adminEmail, 'iat' => $issuedAt->getTimestamp(), 'exp' => $expiresAt->getTimestamp()],
+            $this->secret,
+            self::ALGORITHM,
+        );
 
-        return [
-            'token' => $token,
-            'expiresAt' => date(\DATE_ATOM, $expiresAt),
-            'user' => ['email' => $this->adminEmail],
-        ];
+        return new AuthToken($token, $expiresAt, $this->adminEmail);
     }
 
     /**

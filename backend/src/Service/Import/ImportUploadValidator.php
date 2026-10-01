@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Import;
 
 use App\Exception\ValidationException;
-use Psr\Http\Message\UploadedFileInterface;
 
 /** Validates the uploaded import file: upload status, size, extension, MIME type and xlsx structure. */
 final class ImportUploadValidator
@@ -21,53 +20,52 @@ final class ImportUploadValidator
     }
 
     /** @throws ValidationException */
-    public function validate(?UploadedFileInterface $file): void
+    public function validate(?UploadedImportFile $file): void
     {
         if (null === $file) {
-            throw new ValidationException('Файл не передан', ['file' => 'Поле "file" обязательно']);
+            $this->reject('Поле "file" обязательно', 'Файл не передан');
         }
 
-        if (\UPLOAD_ERR_OK !== $file->getError()) {
-            $message = \in_array($file->getError(), [\UPLOAD_ERR_INI_SIZE, \UPLOAD_ERR_FORM_SIZE], true)
+        if (\UPLOAD_ERR_OK !== $file->uploadError) {
+            $this->reject(\in_array($file->uploadError, [\UPLOAD_ERR_INI_SIZE, \UPLOAD_ERR_FORM_SIZE], true)
                 ? $this->tooLargeMessage()
-                : 'Ошибка загрузки файла (код '.$file->getError().')';
-            throw new ValidationException('Невалидный файл', ['file' => $message]);
+                : 'Ошибка загрузки файла (код '.$file->uploadError.')');
+        }
+        if ($file->size <= 0) {
+            $this->reject('Файл пустой');
+        }
+        if ($file->size > $this->maxFileSize) {
+            $this->reject($this->tooLargeMessage());
+        }
+        if (!\in_array($file->extension(), self::ALLOWED_EXTENSIONS, true)) {
+            $this->reject('Допустимое расширение: .xlsx');
+        }
+        if (!is_file($file->temporaryPath)) {
+            $this->reject('Не удалось прочитать файл');
         }
 
-        $size = $file->getSize() ?? 0;
-        if ($size <= 0) {
-            throw new ValidationException('Невалидный файл', ['file' => 'Файл пустой']);
-        }
-        if ($size > $this->maxFileSize) {
-            throw new ValidationException('Невалидный файл', ['file' => $this->tooLargeMessage()]);
-        }
-
-        $extension = strtolower(pathinfo((string) $file->getClientFilename(), \PATHINFO_EXTENSION));
-        if (!\in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
-            throw new ValidationException('Невалидный файл', ['file' => 'Допустимое расширение: .xlsx']);
-        }
-
-        $path = $file->getStream()->getMetadata('uri');
-        if (!\is_string($path) || !is_file($path)) {
-            throw new ValidationException('Невалидный файл', ['file' => 'Не удалось прочитать файл']);
-        }
-
-        $mime = (new \finfo(\FILEINFO_MIME_TYPE))->file($path);
-        if (!\in_array($mime, self::ALLOWED_MIME_TYPES, true) || !$this->looksLikeXlsx($path)) {
-            throw new ValidationException('Невалидный файл', ['file' => \sprintf('Недопустимый тип файла "%s", ожидается xlsx', $mime)]);
+        $mime = (string) (new \finfo(\FILEINFO_MIME_TYPE))->file($file->temporaryPath);
+        if (!\in_array($mime, self::ALLOWED_MIME_TYPES, true) || !self::containsWorkbook($file->temporaryPath)) {
+            $this->reject(\sprintf('Недопустимый тип файла "%s", ожидается xlsx', $mime));
         }
     }
 
-    private function looksLikeXlsx(string $path): bool
+    /** @throws ValidationException */
+    private function reject(string $reason, string $message = 'Невалидный файл'): never
+    {
+        throw new ValidationException($message, ['file' => $reason]);
+    }
+
+    private static function containsWorkbook(string $path): bool
     {
         $zip = new \ZipArchive();
         if (true !== $zip->open($path, \ZipArchive::RDONLY)) {
             return false;
         }
-        $ok = false !== $zip->locateName('xl/workbook.xml');
+        $found = false !== $zip->locateName('xl/workbook.xml');
         $zip->close();
 
-        return $ok;
+        return $found;
     }
 
     private function tooLargeMessage(): string

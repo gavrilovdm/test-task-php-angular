@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Exception\NotFoundException;
 use App\Http\ImportJobPresenter;
 use App\Http\JsonResponder;
+use App\Http\Request\UploadedImportFileFactory;
 use App\Service\Import\ImportService;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -16,13 +17,14 @@ final class ImportController
     public function __construct(
         private readonly ImportService $imports,
         private readonly ImportJobPresenter $presenter,
+        private readonly UploadedImportFileFactory $uploads,
     ) {
     }
 
     /** POST /api/imports — queues the uploaded file, returns 202 with the job to poll. */
     public function create(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        $job = $this->imports->start($request->getUploadedFiles()['file'] ?? null);
+        $job = $this->imports->start($this->uploads->fromRequest($request));
 
         return JsonResponder::json($response, $this->presenter->present($job), 202)
             ->withHeader('Location', '/api/imports/'.$job->getId());
@@ -31,7 +33,7 @@ final class ImportController
     /** @param array{id: string} $args */
     public function show(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $job = $this->imports->get($args['id']) ?? throw new NotFoundException('Задача импорта не найдена');
+        $job = $this->imports->find($args['id']) ?? throw new NotFoundException('Задача импорта не найдена');
 
         return JsonResponder::json($response, $this->presenter->present($job));
     }

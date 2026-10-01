@@ -25,8 +25,12 @@
     <php>
         <env name="APP_ENV" value="test" force="true"/>
         <env name="IMPORT_RATE_LIMIT" value="5" force="true"/>
+        <env name="MESSENGER_TRANSPORT_DSN" value="in-memory://" force="true"/>
+        <env name="IMPORTS_DIR" value="/tmp/products-import-tests/imports" force="true"/>
+        <env name="IMAGES_DIR" value="/tmp/products-import-tests/images" force="true"/>
         <env name="JWT_SECRET" value="test-secret-test-secret-test-secret-123" force="true"/>
         <env name="ADMIN_EMAIL" value="admin@example.com" force="true"/>
-        <env name="ADMIN_PASSWORD" value="admin123" force="true"/>
+        <!-- bcrypt hash of "admin123" -->
+        <env name="ADMIN_PASSWORD_HASH" value="$2y$12$J3Z2Xp6mpgVxX0xTkYWJjOoMagiGu2l0Ms87DhOThWrR//enJq2qy" force="true"/>
     </php>
 </phpunit>
