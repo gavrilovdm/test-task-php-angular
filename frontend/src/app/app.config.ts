@@ -17,7 +17,8 @@ import { provideStore } from '@ngrx/store';
 import { provideStoreDevtools } from '@ngrx/store-devtools';
 
 import { routes } from './app.routes';
-import { authInterceptor } from './core/auth.interceptor';
+import { authTokenInterceptor } from './core/auth-token.interceptor';
+import { httpErrorInterceptor } from './core/http-error.interceptor';
 import { RuPaginatorIntl } from './core/paginator-intl';
 import { ProductsEffects, productsFeature } from './store/products';
 
@@ -28,7 +29,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes, withComponentInputBinding()),
-    provideHttpClient(withInterceptors([authInterceptor])),
+    provideHttpClient(withInterceptors([authTokenInterceptor, httpErrorInterceptor])),
     provideAnimationsAsync(),
     provideStore({ [productsFeature.name]: productsFeature.reducer }),
     provideEffects(ProductsEffects),

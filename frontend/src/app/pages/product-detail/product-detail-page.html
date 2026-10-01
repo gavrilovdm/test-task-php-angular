@@ -100,12 +100,4 @@
   }
 }
 
-@if (latestImport$ | async; as job) {
-  <mat-expansion-panel class="import-panel" [expanded]="job.status === 'processing' || job.status === 'pending'">
-    <mat-expansion-panel-header>
-      <mat-panel-title><mat-icon>sync</mat-icon>&nbsp;Последний импорт</mat-panel-title>
-      <mat-panel-description>{{ job.progress }}% · {{ job.fileName }}</mat-panel-description>
-    </mat-expansion-panel-header>
-    <app-import-status [job]="job" />
-  </mat-expansion-panel>
-}
+<app-latest-import-panel class="import-panel" />

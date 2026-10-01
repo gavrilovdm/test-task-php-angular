@@ -48,6 +48,7 @@ make up          # создаёт .env из .env.example, собирает об�
 | `make e2e` | Playwright e2e против запущенного стека |
 | `make lint` | PHPStan + PHP CS Fixer |
 | `make logs` | Логи `app` и `worker` |
+| `make password-hash PASSWORD=...` | Bcrypt-хэш для `ADMIN_PASSWORD_HASH` |
 
 ## Архитектура
 
@@ -73,19 +74,36 @@ make up          # создаёт .env из .env.example, собирает об�
 
 ```
 src/
-  Controller/      тонкие контроллеры: принять запрос → делегировать → вернуть JSON
-  Service/Import/  ImportService (приём файла, постановка в очередь), ImportUploadValidator,
-                   XlsxProductReader, ProductRowMapper, ImageDownloader, ProductImporter
-  Service/Auth/    AuthService (JWT HS256)
-  Repository/      ProductRepository, ImportJobRepository, ProductFilter
-  Entity/          Product, ProductAttribute, ProductImage, ImportJob
-  Messenger/       ImportProductsMessage + ImportProductsHandler
-  Middleware/      JwtAuthMiddleware, RateLimitMiddleware, CorsMiddleware
-  Console/         messenger:consume, fixtures:load, import:file
-  DataFixtures/    сидеры для products / product_attributes / product_images
-migrations/        Doctrine Migrations
-resources/         openapi.yaml
+  Config/              Settings — типизированная конфигурация из env
+  Controller/          тонкие контроллеры: принять запрос → делегировать → вернуть JSON
+  Http/                JSON-ответы, презентеры, JsonErrorHandler (исключение → HTTP-статус)
+  Http/Request/        ProductFilterFactory, UploadedImportFileFactory (PSR-7 → DTO сервисного слоя)
+  Middleware/          JwtAuthMiddleware, RateLimitMiddleware, CorsMiddleware
+  Domain/              DiscountCalculator, Page
+  Exception/           доменные исключения без HTTP-кодов
+  Entity/              Product, ProductAttribute, ProductImage, ImportJob
+  Repository/          интерфейсы ProductRepository, ImportJobRepository + ProductFilter
+  Repository/Doctrine/ реализации на Doctrine
+  Persistence/         UnitOfWork (транзакции), DatabaseHealthCheck + Doctrine-реализации
+  Service/Auth/        AuthService (JWT HS256, bcrypt), AuthToken
+  Service/Import/      ImportService (use cases API), ImportUploadValidator, ProductImporter (оркестрация),
+                       ProductWriter (upsert в транзакции)
+    Contract/          ProductSourceReader, ImageFetcher, ImageStorage, ImportFileStorage
+    Source/            XlsxProductReader
+    Row/               ColumnMap (формат файла), ProductRowMapper, MoneyParser
+    Image/             HttpImageFetcher (Guzzle), LocalImageStorage, ImageDownloader
+    Storage/           LocalImportFileStorage
+  Messenger/           ImportProductsMessage + ImportProductsHandler
+  Console/             messenger:consume, fixtures:load, import:file
+  DataFixtures/        сидеры для products / product_attributes / product_images
+migrations/            Doctrine Migrations
+resources/             openapi.yaml
 ```
+
+**Принципы.** Сервисы зависят от интерфейсов (`Repository`, `UnitOfWork`, `Contract/*`), реализации
+связываются в `config/container.php`. Сервисный слой не знает про HTTP: получает DTO и бросает доменные
+исключения, а статусы назначает `JsonErrorHandler`. Формат файла описан `ColumnMap` — другой формат
+подключается новой картой колонок или новой реализацией `ProductSourceReader`, без правки импортёра.
 
 **Схема БД**
 
@@ -108,7 +126,7 @@ resources/         openapi.yaml
 | `Доп. поле: Ссылки на фото`, `Доп. поле: Ссылка на упаковку` | `product_images` (скачиваются в `public/uploads/products`) |
 
 - **Асинхронно.** `POST /api/imports` только валидирует и сохраняет файл, создаёт `ImportJob` и отправляет сообщение в RabbitMQ — ответ `202 Accepted` с `id` задачи. Обработку выполняет `worker`.
-- **Ошибки не прерывают импорт.** Невалидная строка (нет кода/названия, некорректная цена, закупочная цена выше продажной) пропускается, причины попадают в отчёт `errors[]` (`row`, `externalCode`, `field`, `message`, `level`). Нескачанное изображение — `warning`, товар всё равно сохраняется (`path = null`). Если в файле нет обязательных колонок, задача получает статус `failed`.
+- **Ошибки не прерывают импорт.** Невалидная строка (нет кода/названия, некорректная цена, закупочная цена выше продажной) пропускается, причины попадают в отчёт `errors[]` (`row`, `externalCode`, `field`, `message`, `level`). Нескачанное изображение — `warning`, товар всё равно сохраняется (`path = null`). Если в файле нет обязательных колонок, задача получает статус `failed`. Технические детали сбоев пишутся только в лог, в отчёт попадает обобщённое сообщение.
 - **Upsert по `external_code`.** Повторный импорт обновляет товар и заменяет его атрибуты/изображения — дубликатов нет. Уже скачанные изображения переиспользуются (имя файла — `sha1(url)`).
 - **Атомарность.** Товар + атрибуты + изображения записываются в одной транзакции; сетевые загрузки делаются до неё, чтобы транзакция была короткой.
 - **Тип изображения** определяется по содержимому (`finfo`), т.к. сервер из примера отдаёт часть картинок как `binary/octet-stream`.
@@ -135,12 +153,13 @@ resources/         openapi.yaml
 src/app/
   app.routes.ts          роутинг, все страницы — lazy loadComponent, защита authGuard (CanActivateFn)
   models/                Product, ProductAttribute, ProductImage, ImportJob, Paginated …
-  services/              ProductService, ImportService, AuthService — HttpClient только здесь
-  core/                  authInterceptor (Bearer + глобальные 401/5xx), authGuard, русская локализация пагинатора
+  services/              ProductService, ImportService, AuthService (+ SessionStore) — HttpClient только здесь
+  core/                  authTokenInterceptor (Bearer), httpErrorInterceptor (глобальные 401/5xx), authGuard,
+                         httpErrorMessage(), токены API_BASE_URL / IMPORT_MAX_FILE_SIZE, русский пагинатор
   store/products/        NgRx: loadProducts / loadProductsSuccess / loadProductsFailure, effects, selectors
                          (selectAllProducts, selectProductsLoading, selectTotalPages …)
   pages/                 login, import, products-list, product-detail
-  shared/import-status/  индикатор прогресса + таблица отчёта об ошибках
+  shared/                import-status (прогресс + отчёт), latest-import-panel (последний импорт с polling)
 ```
 
 - Список товаров берёт данные только через `store.select()` + `async` pipe; пагинация и фильтры — серверные.
@@ -169,7 +188,7 @@ src/app/
 ## Переменные окружения
 
 Все переменные описаны с комментариями в [`.env.example`](.env.example): порты, доступы к PostgreSQL и RabbitMQ,
-`JWT_SECRET` / `JWT_TTL`, учётная запись администратора, лимиты импорта (`IMPORT_MAX_FILE_SIZE`,
+`JWT_SECRET` / `JWT_TTL`, учётная запись администратора (пароль хранится bcrypt-хэшем `ADMIN_PASSWORD_HASH`), лимиты импорта (`IMPORT_MAX_FILE_SIZE`,
 `IMPORT_RATE_LIMIT`, `IMPORT_RATE_INTERVAL`), таймаут скачивания изображений.
 
 ## Допущения

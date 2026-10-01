@@ -2,12 +2,13 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map, switchMap, takeWhile, timer } from 'rxjs';
 
+import { API_BASE_URL } from '../core/app-config.tokens';
 import { ImportJob, isImportFinished } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class ImportService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = '/api/imports';
+  private readonly baseUrl = `${inject(API_BASE_URL)}/imports`;
 
   /** Uploads an .xlsx file; the backend queues the job and answers 202 immediately. */
   upload(file: File): Observable<ImportJob> {

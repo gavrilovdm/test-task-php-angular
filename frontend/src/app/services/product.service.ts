@@ -2,12 +2,13 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
+import { API_BASE_URL } from '../core/app-config.tokens';
 import { Paginated, Product, ProductQuery, ProductSummary } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class ProductService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = '/api/products';
+  private readonly baseUrl = `${inject(API_BASE_URL)}/products`;
 
   /** Server-side paginated and filtered list: GET /api/products?page=&limit=&name=&price_min=&price_max= */
   getProducts(query: ProductQuery): Observable<Paginated<ProductSummary>> {

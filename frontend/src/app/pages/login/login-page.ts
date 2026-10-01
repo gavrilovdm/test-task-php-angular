@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, input, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,7 +9,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 
-import { ApiError } from '../../models';
+import { httpErrorMessage } from '../../core/http-error';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -47,7 +46,7 @@ export class LoginPage {
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
         next: () => void this.router.navigateByUrl(this.returnUrl() || '/products'),
-        error: (err: HttpErrorResponse) => this.error.set((err.error as ApiError | null)?.error ?? 'Не удалось войти'),
+        error: (err: unknown) => this.error.set(httpErrorMessage(err, 'Не удалось войти')),
       });
   }
 }

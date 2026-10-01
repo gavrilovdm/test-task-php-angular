@@ -6,17 +6,15 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTableModule } from '@angular/material/table';
 import { RouterLink } from '@angular/router';
 import { Observable, catchError, map, of, startWith, switchMap, tap } from 'rxjs';
 
-import { ImportJob, Product, ProductImage, isImportFinished } from '../../models';
-import { ImportService } from '../../services/import.service';
+import { Product, ProductImage } from '../../models';
 import { ProductService } from '../../services/product.service';
-import { ImportStatus } from '../../shared/import-status/import-status';
+import { LatestImportPanel } from '../../shared/latest-import-panel/latest-import-panel';
 
 interface ProductView {
   loading: boolean;
@@ -36,18 +34,16 @@ interface ProductView {
     MatButtonModule,
     MatChipsModule,
     MatDividerModule,
-    MatExpansionModule,
     MatIconModule,
     MatProgressBarModule,
     MatTableModule,
-    ImportStatus,
+    LatestImportPanel,
   ],
   templateUrl: './product-detail-page.html',
   styleUrl: './product-detail-page.scss',
 })
 export class ProductDetailPage {
   private readonly productService = inject(ProductService);
-  private readonly importService = inject(ImportService);
 
   /** Route parameter :id (bound via withComponentInputBinding). */
   readonly id = input.required<string>();
@@ -72,16 +68,6 @@ export class ProductDetailPage {
     ),
   );
 
-  /** Latest import job: polled while it is running, so progress and report stay up to date. */
-  protected readonly latestImport$: Observable<ImportJob | null> = this.importService.getLatest(1).pipe(
-    switchMap(([job]) => {
-      if (!job) {
-        return of(null);
-      }
-      return isImportFinished(job) ? of(job) : this.importService.watch(job.id);
-    }),
-    catchError(() => of(null)),
-  );
 
   imageSrc(image: ProductImage): string {
     return image.path ?? image.url;
