@@ -1,0 +1,100 @@
+.filters-card {
+  margin-bottom: 16px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+
+  .name {
+    flex: 2 1 240px;
+  }
+
+  .price {
+    flex: 1 1 120px;
+  }
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.table-card {
+  overflow: hidden;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.row {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--mat-sys-surface-container);
+  }
+}
+
+.thumb {
+  width: 48px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+
+  &.placeholder {
+    display: grid;
+    place-items: center;
+    background: var(--mat-sys-surface-container-high);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.name-link {
+  color: var(--mat-sys-primary);
+  text-decoration: none;
+  font-weight: 500;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.code {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+  }
+}
+
+.error {
+  color: var(--mat-sys-error);
+  padding: 16px;
+  margin: 0;
+}
+
+.summary {
+  padding: 0 16px 12px;
+  margin: 0;
+  font-size: 13px;
+}

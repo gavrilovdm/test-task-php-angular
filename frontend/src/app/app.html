@@ -1,0 +1,25 @@
+<mat-toolbar color="primary" class="toolbar">
+  <a routerLink="/products" class="brand">
+    <mat-icon>inventory_2</mat-icon>
+    <span>Каталог товаров</span>
+  </a>
+  @if (auth.user(); as user) {
+    <nav class="nav">
+      <a mat-button routerLink="/products" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: false }">
+        <mat-icon>list</mat-icon> Товары
+      </a>
+      <a mat-button routerLink="/import" routerLinkActive="active" data-testid="nav-import">
+        <mat-icon>upload_file</mat-icon> Импорт
+      </a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="user">{{ user.email }}</span>
+    <button mat-icon-button (click)="logout()" aria-label="Выйти" data-testid="logout">
+      <mat-icon>logout</mat-icon>
+    </button>
+  }
+</mat-toolbar>
+
+<main class="content">
+  <router-outlet />
+</main>

@@ -1,0 +1,76 @@
+<mat-card appearance="outlined" class="status-card" data-testid="import-status">
+  <mat-card-header>
+    <mat-icon mat-card-avatar [class]="'avatar ' + job().status">
+      @switch (job().status) {
+        @case ('completed') { task_alt }
+        @case ('failed') { error }
+        @default { hourglass_top }
+      }
+    </mat-icon>
+    <mat-card-title>{{ job().fileName }}</mat-card-title>
+    <mat-card-subtitle>
+      <span data-testid="import-status-label">{{ statusLabel() }}</span>
+      · {{ job().createdAt | date: 'dd.MM.yyyy HH:mm:ss' }}
+    </mat-card-subtitle>
+  </mat-card-header>
+
+  <mat-card-content>
+    <div class="progress">
+      <mat-progress-bar
+        [mode]="job().status === 'pending' ? 'query' : 'determinate'"
+        [value]="job().progress"
+        [color]="job().status === 'failed' ? 'warn' : 'primary'"
+      />
+      <span class="progress-value" data-testid="import-progress">{{ job().progress }}%</span>
+    </div>
+    <p class="muted rows">Обработано строк: {{ job().processedRows }} из {{ job().totalRows || '—' }}</p>
+
+    <mat-chip-set aria-label="Итоги импорта">
+      <mat-chip highlighted data-testid="import-created">Создано: {{ job().createdCount }}</mat-chip>
+      <mat-chip data-testid="import-updated">Обновлено: {{ job().updatedCount }}</mat-chip>
+      <mat-chip [highlighted]="job().failedCount > 0" class="failed" data-testid="import-failed">
+        С ошибками: {{ job().failedCount }}
+      </mat-chip>
+    </mat-chip-set>
+
+    @if (!compact() && job().errors.length > 0) {
+      <h3 class="report-title">
+        Отчёт: {{ errorCount() }} ошибок, {{ warningCount() }} предупреждений
+      </h3>
+      <div class="report" data-testid="import-report">
+        <table mat-table [dataSource]="job().errors">
+          <ng-container matColumnDef="level">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let e">
+              <mat-icon [class]="e.level" [attr.aria-label]="e.level === 'error' ? 'Ошибка' : 'Предупреждение'">
+                {{ e.level === 'error' ? 'error' : 'warning' }}
+              </mat-icon>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="row">
+            <th mat-header-cell *matHeaderCellDef>Строка</th>
+            <td mat-cell *matCellDef="let e">{{ e.row ?? '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="externalCode">
+            <th mat-header-cell *matHeaderCellDef>Внешний код</th>
+            <td mat-cell *matCellDef="let e" class="code">{{ e.externalCode ?? '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="field">
+            <th mat-header-cell *matHeaderCellDef>Поле</th>
+            <td mat-cell *matCellDef="let e">{{ e.field ?? '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="message">
+            <th mat-header-cell *matHeaderCellDef>Сообщение</th>
+            <td mat-cell *matCellDef="let e" class="message">{{ e.message }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="columns; sticky: true"></tr>
+          <tr mat-row *matRowDef="let row; columns: columns"></tr>
+        </table>
+      </div>
+    } @else if (finished() && job().errors.length === 0) {
+      <p class="ok">Ошибок нет.</p>
+    } @else if (compact() && job().errors.length > 0) {
+      <p class="muted">Ошибок: {{ errorCount() }}, предупреждений: {{ warningCount() }}</p>
+    }
+  </mat-card-content>
+</mat-card>

@@ -1,0 +1,76 @@
+.status-card {
+  margin-top: 16px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+
+  &.completed {
+    background: #d7f5dd;
+    color: #1b6b2f;
+  }
+
+  &.failed {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+
+  mat-progress-bar {
+    flex: 1;
+  }
+}
+
+.progress-value {
+  min-width: 44px;
+  text-align: right;
+  font-weight: 500;
+}
+
+.rows {
+  margin: 8px 0 12px;
+}
+
+.report-title {
+  margin: 20px 0 8px;
+  font: var(--mat-sys-title-small);
+}
+
+.report {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+}
+
+.code {
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.message {
+  word-break: break-word;
+}
+
+mat-icon.error {
+  color: var(--mat-sys-error);
+}
+
+mat-icon.warning {
+  color: #b26a00;
+}
+
+.ok {
+  color: #1b6b2f;
+  margin-top: 12px;
+}

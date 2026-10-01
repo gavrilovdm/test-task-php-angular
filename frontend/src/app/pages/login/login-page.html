@@ -1,0 +1,49 @@
+<mat-card class="login-card" appearance="outlined">
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+  <mat-card-header>
+    <mat-icon mat-card-avatar class="avatar">lock</mat-icon>
+    <mat-card-title>Вход</mat-card-title>
+    <mat-card-subtitle>Импорт и каталог товаров</mat-card-subtitle>
+  </mat-card-header>
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <mat-card-content>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Email</mat-label>
+        <input matInput type="email" formControlName="email" autocomplete="username" data-testid="login-email" />
+        @if (form.controls.email.hasError('required')) {
+          <mat-error>Введите email</mat-error>
+        } @else if (form.controls.email.hasError('email')) {
+          <mat-error>Некорректный email</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Пароль</mat-label>
+        <input
+          matInput
+          [type]="hidePassword() ? 'password' : 'text'"
+          formControlName="password"
+          autocomplete="current-password"
+          data-testid="login-password"
+        />
+        <button mat-icon-button matSuffix type="button" (click)="hidePassword.set(!hidePassword())" aria-label="Показать пароль">
+          <mat-icon>{{ hidePassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
+        </button>
+        @if (form.controls.password.hasError('required')) {
+          <mat-error>Введите пароль</mat-error>
+        }
+      </mat-form-field>
+
+      @if (error()) {
+        <p class="error" role="alert" data-testid="login-error">{{ error() }}</p>
+      }
+    </mat-card-content>
+
+    <mat-card-actions align="end">
+      <button mat-flat-button type="submit" [disabled]="loading()" data-testid="login-submit">Войти</button>
+    </mat-card-actions>
+  </form>
+</mat-card>

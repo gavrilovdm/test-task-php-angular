@@ -1,0 +1,40 @@
+<h1 class="page-title">Импорт товаров</h1>
+
+<mat-card appearance="outlined">
+  @if (uploading()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+  <mat-card-content>
+    <p class="muted">
+      Загрузите файл <strong>.xlsx</strong> (до 10 МБ). Импорт выполняется в фоне: товары создаются или обновляются по
+      «Внешнему коду», изображения скачиваются, невалидные строки попадают в отчёт.
+    </p>
+
+    <div class="picker">
+      <input #fileInput type="file" hidden accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+             (change)="onFileSelected($event)" data-testid="import-file-input" />
+      <button mat-stroked-button type="button" (click)="fileInput.click()" [disabled]="uploading()">
+        <mat-icon>attach_file</mat-icon> Выбрать файл
+      </button>
+      <span class="file-name" data-testid="import-file-name">
+        {{ file()?.name ?? 'Файл не выбран' }}
+      </span>
+      <button mat-flat-button type="button" (click)="upload()" [disabled]="!file() || uploading()" data-testid="import-submit">
+        <mat-icon>cloud_upload</mat-icon> Загрузить
+      </button>
+    </div>
+
+    @if (error()) {
+      <p class="error" role="alert" data-testid="import-error">{{ error() }}</p>
+    }
+  </mat-card-content>
+</mat-card>
+
+@if (job$ | async; as job) {
+  <app-import-status [job]="job" />
+  @if (job.status === 'completed') {
+    <div class="actions">
+      <a mat-flat-button routerLink="/products" data-testid="go-products"><mat-icon>list</mat-icon> К списку товаров</a>
+    </div>
+  }
+}

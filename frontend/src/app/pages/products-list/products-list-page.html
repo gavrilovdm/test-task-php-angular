@@ -1,0 +1,98 @@
+<h1 class="page-title">Товары</h1>
+
+<mat-card appearance="outlined" class="filters-card">
+  <mat-card-content>
+    <form class="filters" [formGroup]="filters" (ngSubmit)="applyFilters()" data-testid="filters">
+      <mat-form-field appearance="outline" class="name">
+        <mat-label>Наименование</mat-label>
+        <mat-icon matPrefix>search</mat-icon>
+        <input matInput formControlName="name" placeholder="Например, леггинсы" data-testid="filter-name" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="price">
+        <mat-label>Цена от, ₽</mat-label>
+        <input matInput formControlName="priceMin" inputmode="decimal" data-testid="filter-price-min" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="price">
+        <mat-label>Цена до, ₽</mat-label>
+        <input matInput formControlName="priceMax" inputmode="decimal" data-testid="filter-price-max" />
+      </mat-form-field>
+      <div class="filter-actions">
+        <button mat-flat-button type="submit" data-testid="filter-apply">Найти</button>
+        <button mat-button type="button" (click)="resetFilters()">Сбросить</button>
+      </div>
+    </form>
+  </mat-card-content>
+</mat-card>
+
+<mat-card appearance="outlined" class="table-card">
+  @if (loading$ | async) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+
+  @if (error$ | async; as error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+
+  @if (products$ | async; as products) {
+    @if (products.length === 0 && !(loading$ | async)) {
+      <div class="empty" data-testid="empty">
+        <mat-icon>inventory</mat-icon>
+        <p>Товары не найдены.</p>
+        <a mat-stroked-button routerLink="/import">Импортировать из xlsx</a>
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table mat-table [dataSource]="products" data-testid="products-table">
+          <ng-container matColumnDef="image">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let p">
+              @if (p.image) {
+                <img class="thumb" [src]="p.image" [alt]="p.name" loading="lazy" />
+              } @else {
+                <div class="thumb placeholder"><mat-icon>image</mat-icon></div>
+              }
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Наименование</th>
+            <td mat-cell *matCellDef="let p">
+              <a class="name-link" [routerLink]="['/products', p.id]" data-testid="product-link">{{ p.name }}</a>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="externalCode">
+            <th mat-header-cell *matHeaderCellDef>Внешний код</th>
+            <td mat-cell *matCellDef="let p" class="code">{{ p.externalCode }}</td>
+          </ng-container>
+          <ng-container matColumnDef="price">
+            <th mat-header-cell *matHeaderCellDef class="num">Цена</th>
+            <td mat-cell *matCellDef="let p" class="num">{{ p.price | currency: 'RUB' : 'symbol-narrow' : '1.2-2' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="discount">
+            <th mat-header-cell *matHeaderCellDef class="num">Скидка</th>
+            <td mat-cell *matCellDef="let p" class="num">
+              {{ p.discount === null ? '—' : (p.discount | number: '1.0-2') + ' %' }}
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="columns"></tr>
+          <tr mat-row *matRowDef="let row; columns: columns" class="row" [routerLink]="['/products', row.id]"></tr>
+        </table>
+      </div>
+    }
+  }
+
+  @if (query$ | async; as query) {
+    <mat-paginator
+      [length]="total$ | async"
+      [pageIndex]="query.page - 1"
+      [pageSize]="query.limit"
+      [pageSizeOptions]="pageSizes"
+      [showFirstLastButtons]="true"
+      (page)="onPage($event)"
+      aria-label="Страницы товаров"
+    />
+    <p class="muted summary" data-testid="products-summary">
+      Всего: {{ total$ | async }} · страница {{ query.page }} из {{ (totalPages$ | async) || 1 }}
+    </p>
+  }
+</mat-card>

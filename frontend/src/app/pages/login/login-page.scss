@@ -1,0 +1,22 @@
+.login-card {
+  max-width: 420px;
+  margin: 48px auto;
+  overflow: hidden;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+  border-radius: 50%;
+}
+
+form {
+  padding-top: 16px;
+}
+
+.error {
+  color: var(--mat-sys-error);
+  margin: 0 0 8px;
+}

@@ -1,0 +1,137 @@
+.back {
+  margin-bottom: 12px;
+}
+
+.product {
+  overflow: hidden;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 24px;
+  padding: 24px;
+
+  @media (max-width: 800px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.main-image {
+  aspect-ratio: 3 / 4;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--mat-sys-surface-container);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+.no-image {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+  }
+}
+
+.thumbs {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.thumb {
+  flex: 0 0 64px;
+  height: 84px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--mat-sys-surface-container);
+  display: grid;
+  place-items: center;
+
+  &.selected {
+    border-color: var(--mat-sys-primary);
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.title {
+  font: var(--mat-sys-headline-small);
+  margin: 0 0 4px;
+}
+
+.code {
+  font-family: monospace;
+  margin: 0 0 16px;
+}
+
+.price-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.price {
+  font: var(--mat-sys-headline-medium);
+  color: var(--mat-sys-primary);
+}
+
+h2 {
+  font: var(--mat-sys-title-medium);
+  margin: 16px 0 8px;
+}
+
+.description {
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.dates {
+  font-size: 13px;
+}
+
+.attributes {
+  padding: 8px 24px 24px;
+
+  .key {
+    width: 40%;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .value {
+    word-break: break-word;
+  }
+}
+
+.error-card mat-card-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--mat-sys-error);
+}
+
+.import-panel {
+  margin-top: 24px;
+}

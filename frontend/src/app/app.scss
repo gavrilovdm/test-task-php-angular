@@ -1,0 +1,46 @@
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 8px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+  margin-right: 16px;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+
+  .active {
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+}
+
+.spacer {
+  flex: 1;
+}
+
+.user {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+@media (max-width: 600px) {
+  .brand span,
+  .user {
+    display: none;
+  }
+}

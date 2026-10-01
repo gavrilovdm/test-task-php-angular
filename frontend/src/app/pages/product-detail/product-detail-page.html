@@ -1,0 +1,111 @@
+<a mat-button routerLink="/products" class="back"><mat-icon>arrow_back</mat-icon> К списку</a>
+
+@if (view$ | async; as view) {
+  @if (view.loading) {
+    <mat-progress-bar mode="indeterminate" />
+  } @else if (view.error) {
+    <mat-card appearance="outlined" class="error-card">
+      <mat-card-content>
+        <mat-icon>error_outline</mat-icon>
+        <p role="alert" data-testid="product-error">{{ view.error }}</p>
+      </mat-card-content>
+    </mat-card>
+  } @else if (view.product; as product) {
+    <mat-card appearance="outlined" class="product" data-testid="product-card">
+      <div class="layout">
+        <section class="gallery" aria-label="Изображения">
+          @if (product.images.length > 0) {
+            @let current = product.images[selectedImage()];
+            <div class="main-image">
+              @if (current.path) {
+                <img [src]="imageSrc(current)" [alt]="product.name" data-testid="product-main-image" />
+              } @else {
+                <div class="no-image">
+                  <mat-icon>broken_image</mat-icon>
+                  <span>Изображение не загружено</span>
+                  <a [href]="current.url" target="_blank" rel="noopener">исходная ссылка</a>
+                </div>
+              }
+            </div>
+            @if (product.images.length > 1) {
+              <div class="thumbs">
+                @for (image of product.images; track image.id; let i = $index) {
+                  <button
+                    type="button"
+                    class="thumb"
+                    [class.selected]="i === selectedImage()"
+                    (click)="selectedImage.set(i)"
+                    [attr.aria-label]="'Изображение ' + (i + 1)"
+                  >
+                    @if (image.path) {
+                      <img [src]="imageSrc(image)" alt="" loading="lazy" />
+                    } @else {
+                      <mat-icon>broken_image</mat-icon>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          } @else {
+            <div class="main-image no-image"><mat-icon>image</mat-icon><span>Нет изображений</span></div>
+          }
+        </section>
+
+        <section class="info">
+          <h1 class="title" data-testid="product-name">{{ product.name }}</h1>
+          <p class="muted code">Внешний код: <span data-testid="product-code">{{ product.externalCode }}</span></p>
+
+          <div class="price-row">
+            <span class="price" data-testid="product-price">{{ product.price | currency: 'RUB' : 'symbol-narrow' : '1.2-2' }}</span>
+            @if (product.discount !== null) {
+              <mat-chip-set>
+                <mat-chip highlighted data-testid="product-discount">Скидка {{ product.discount | number: '1.0-2' }} %</mat-chip>
+              </mat-chip-set>
+            }
+          </div>
+
+          <mat-divider />
+
+          <h2>Описание</h2>
+          <p class="description">{{ product.description || 'Описание отсутствует' }}</p>
+
+          <p class="muted dates">
+            Создан {{ product.createdAt | date: 'dd.MM.yyyy HH:mm' }} · обновлён {{ product.updatedAt | date: 'dd.MM.yyyy HH:mm' }}
+          </p>
+        </section>
+      </div>
+
+      <mat-divider />
+
+      <section class="attributes">
+        <h2>Дополнительные атрибуты</h2>
+        @if (product.attributes.length > 0) {
+          <table mat-table [dataSource]="product.attributes" data-testid="product-attributes">
+            <ng-container matColumnDef="key">
+              <th mat-header-cell *matHeaderCellDef>Атрибут</th>
+              <td mat-cell *matCellDef="let a" class="key">{{ a.key }}</td>
+            </ng-container>
+            <ng-container matColumnDef="value">
+              <th mat-header-cell *matHeaderCellDef>Значение</th>
+              <td mat-cell *matCellDef="let a" class="value">{{ a.value }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="attributeColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: attributeColumns"></tr>
+          </table>
+        } @else {
+          <p class="muted">Атрибутов нет</p>
+        }
+      </section>
+    </mat-card>
+  }
+}
+
+@if (latestImport$ | async; as job) {
+  <mat-expansion-panel class="import-panel" [expanded]="job.status === 'processing' || job.status === 'pending'">
+    <mat-expansion-panel-header>
+      <mat-panel-title><mat-icon>sync</mat-icon>&nbsp;Последний импорт</mat-panel-title>
+      <mat-panel-description>{{ job.progress }}% · {{ job.fileName }}</mat-panel-description>
+    </mat-expansion-panel-header>
+    <app-import-status [job]="job" />
+  </mat-expansion-panel>
+}
