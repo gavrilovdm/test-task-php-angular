@@ -1,0 +1,11 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__.'/../vendor/autoload.php';
+
+use App\Console\ConsoleApplicationFactory;
+use App\Kernel;
+
+exit(ConsoleApplicationFactory::create(Kernel::createContainer())->run());

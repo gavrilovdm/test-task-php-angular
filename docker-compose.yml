@@ -1,0 +1,110 @@
+name: products-import
+
+x-app-env: &app-env
+  APP_ENV: ${APP_ENV:-prod}
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  MESSENGER_TRANSPORT_DSN: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/messages
+  JWT_SECRET: ${JWT_SECRET}
+  JWT_TTL: ${JWT_TTL:-3600}
+  ADMIN_EMAIL: ${ADMIN_EMAIL}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+  IMPORT_MAX_FILE_SIZE: ${IMPORT_MAX_FILE_SIZE:-10485760}
+  IMPORT_RATE_LIMIT: ${IMPORT_RATE_LIMIT:-5}
+  IMPORT_RATE_INTERVAL: ${IMPORT_RATE_INTERVAL:-1 minute}
+  IMAGE_DOWNLOAD_TIMEOUT: ${IMAGE_DOWNLOAD_TIMEOUT:-15}
+  CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN:-*}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${RABBITMQ_UI_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ./backend
+      target: prod
+    image: products-import/app:latest
+    environment:
+      <<: *app-env
+      RUN_MIGRATIONS: "1"
+    volumes:
+      - uploads:/var/www/html/public/uploads
+      - imports:/var/www/html/var/imports
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    image: products-import/app:latest
+    command: ["php", "bin/console", "messenger:consume", "--time-limit=3600", "-vv"]
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      - uploads:/var/www/html/public/uploads
+      - imports:/var/www/html/var/imports
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_healthy
+
+  nginx:
+    build:
+      context: ./frontend
+      target: prod
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - uploads:/var/www/uploads:ro
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # Tooling container (composer / phpunit / phpstan / php-cs-fixer). Source is bind-mounted.
+  php-dev:
+    profiles: ["tools"]
+    build:
+      context: ./backend
+      target: dev
+    environment:
+      <<: *app-env
+      APP_ENV: test
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}_test
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  uploads:
+  imports:

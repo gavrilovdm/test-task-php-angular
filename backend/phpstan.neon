@@ -1,0 +1,14 @@
+parameters:
+    level: 6
+    paths:
+        - src
+        - config
+        - tests
+        - public
+    tmpDir: var/cache/phpstan
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # Doctrine assigns generated IDs via reflection.
+        -
+            identifier: property.unusedType
+            path: src/Entity/*

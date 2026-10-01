@@ -1,0 +1,5 @@
+vendor
+var
+public/uploads
+.php-cs-fixer.cache
+.phpunit.cache

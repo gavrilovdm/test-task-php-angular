@@ -1,0 +1,13 @@
+.env
+.idea/
+.DS_Store
+backend/vendor/
+backend/var/
+backend/public/uploads/
+backend/.php-cs-fixer.cache
+backend/.phpunit.cache
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/test-results/
+frontend/playwright-report/

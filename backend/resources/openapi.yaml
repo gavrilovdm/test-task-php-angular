@@ -1,0 +1,297 @@
+openapi: 3.0.3
+info:
+  title: Products Import API
+  version: 1.0.0
+  description: |
+    Импорт товаров из `.xlsx` (асинхронно через Symfony Messenger + RabbitMQ), список и карточка товаров.
+
+    Все эндпоинты, кроме `/health`, `/auth/login` и `/docs`, требуют заголовок `Authorization: Bearer <token>`.
+    Токен выдаёт `POST /api/auth/login`.
+servers:
+  - url: /api
+tags:
+  - name: System
+  - name: Auth
+  - name: Products
+  - name: Imports
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string, example: Товар не найден }
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            errors:
+              type: object
+              additionalProperties: { type: string }
+              example: { file: 'Допустимое расширение: .xlsx' }
+    ProductSummary:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        externalCode: { type: string, example: 3UHfAid1jaMiwgBuNvnsf3 }
+        name: { type: string, example: 'Бермуды мужские, Grigio/Verde, OMSA, 46(M), РОССИЯ' }
+        price: { type: number, format: float, example: 1320.0 }
+        discount: { type: number, format: float, nullable: true, example: 33.33, description: '(Цена продажи − Закупочная цена) / Цена продажи × 100' }
+        image: { type: string, nullable: true, example: /uploads/products/0a1b2c.jpg, description: Первое изображение (локальный путь или исходная ссылка) }
+    ProductAttribute:
+      type: object
+      properties:
+        id: { type: integer }
+        key: { type: string, example: Цвет }
+        value: { type: string, example: Grigio/Verde }
+    ProductImage:
+      type: object
+      properties:
+        id: { type: integer }
+        url: { type: string, description: Исходная ссылка из файла импорта }
+        path: { type: string, nullable: true, description: 'Локальный путь (null, если скачать не удалось)' }
+        position: { type: integer }
+    Product:
+      allOf:
+        - $ref: '#/components/schemas/ProductSummary'
+        - type: object
+          properties:
+            description: { type: string, nullable: true }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            attributes:
+              type: array
+              items: { $ref: '#/components/schemas/ProductAttribute' }
+            images:
+              type: array
+              items: { $ref: '#/components/schemas/ProductImage' }
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        total: { type: integer, example: 40 }
+        totalPages: { type: integer, example: 2 }
+    ImportError:
+      type: object
+      properties:
+        row: { type: integer, nullable: true, description: Номер строки в xlsx }
+        externalCode: { type: string, nullable: true }
+        field: { type: string, nullable: true }
+        message: { type: string }
+        level: { type: string, enum: [error, warning] }
+    ImportJob:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, processing, completed, failed] }
+        fileName: { type: string }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        totalRows: { type: integer }
+        processedRows: { type: integer }
+        createdCount: { type: integer }
+        updatedCount: { type: integer }
+        failedCount: { type: integer }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/ImportError' }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+  responses:
+    Unauthorized:
+      description: Нет или недействительный токен
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  checks: { type: object, example: { database: ok } }
+                  time: { type: string, format: date-time }
+        '503':
+          description: Зависимость недоступна
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Получить JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, example: admin@example.com }
+                password: { type: string, example: admin123 }
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expiresAt: { type: string, format: date-time }
+                  user: { type: object, properties: { email: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Текущий пользователь
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { email: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: Список товаров (серверная пагинация и фильтры)
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: name, in: query, description: Поиск по подстроке наименования (без учёта регистра), schema: { type: string } }
+        - { name: price_min, in: query, schema: { type: number, minimum: 0 } }
+        - { name: price_max, in: query, schema: { type: number, minimum: 0 } }
+      responses:
+        '200':
+          description: Страница товаров
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProductSummary' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: Карточка товара с атрибутами и изображениями
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Товар
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /imports:
+    post:
+      tags: [Imports]
+      summary: Загрузить xlsx и поставить импорт в очередь
+      description: |
+        Файл валидируется (расширение `.xlsx`, MIME, размер ≤ `IMPORT_MAX_FILE_SIZE`), сохраняется,
+        а задача отправляется в RabbitMQ. Обработку выполняет воркер. Статус — `GET /imports/{id}`.
+        Ограничение частоты: `IMPORT_RATE_LIMIT` запросов за `IMPORT_RATE_INTERVAL` на пользователя.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '202':
+          description: Задача принята
+          headers:
+            Location: { schema: { type: string } }
+            X-RateLimit-Remaining: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429':
+          description: Превышен лимит запросов
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Очередь недоступна
+    get:
+      tags: [Imports]
+      summary: Последние задачи импорта
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        '200':
+          description: Список задач
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ImportJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /imports/{id}:
+    get:
+      tags: [Imports]
+      summary: Статус, прогресс и отчёт об ошибках задачи импорта
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Задача
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
