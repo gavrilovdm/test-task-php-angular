@@ -9,7 +9,7 @@ import {
   provideBrowserGlobalErrorListeners,
   provideZoneChangeDetection,
 } from '@angular/core';
-import { MAT_PAGINATOR_DEFAULT_OPTIONS } from '@angular/material/paginator';
+import { MAT_PAGINATOR_DEFAULT_OPTIONS, MatPaginatorIntl } from '@angular/material/paginator';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { provideEffects } from '@ngrx/effects';
@@ -18,6 +18,7 @@ import { provideStoreDevtools } from '@ngrx/store-devtools';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth.interceptor';
+import { RuPaginatorIntl } from './core/paginator-intl';
 import { ProductsEffects, productsFeature } from './store/products';
 
 registerLocaleData(localeRu);
@@ -34,6 +35,7 @@ export const appConfig: ApplicationConfig = {
     provideStoreDevtools({ maxAge: 25, logOnly: !isDevMode() }),
     { provide: LOCALE_ID, useValue: 'ru' },
     { provide: DEFAULT_CURRENCY_CODE, useValue: 'RUB' },
+    { provide: MatPaginatorIntl, useClass: RuPaginatorIntl },
     { provide: MAT_PAGINATOR_DEFAULT_OPTIONS, useValue: { formFieldAppearance: 'outline' } },
   ],
 };

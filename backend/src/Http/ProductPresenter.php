@@ -14,7 +14,8 @@ final class ProductPresenter
     /** @return array<string, mixed> */
     public function summary(Product $product): array
     {
-        $first = $product->getImages()->first();
+        // Thumbnail: first image that was actually downloaded (remote links may be broken).
+        $first = $product->getImages()->findFirst(static fn (int $_, ProductImage $image): bool => null !== $image->getPath());
 
         return [
             'id' => $product->getId(),
@@ -22,7 +23,7 @@ final class ProductPresenter
             'name' => $product->getName(),
             'price' => (float) $product->getPrice(),
             'discount' => null === $product->getDiscount() ? null : (float) $product->getDiscount(),
-            'image' => $first instanceof ProductImage ? ($first->getPath() ?? $first->getUrl()) : null,
+            'image' => $first?->getPath(),
         ];
     }
 
